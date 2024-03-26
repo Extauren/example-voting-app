@@ -1,16 +1,14 @@
 # version is now using "compose spec"
 # v2 and v3 are now combined!
 # docker-compose v1.27+ required
-
 services:
   vote:
-    build: 
+    build:
       context: ./vote
-      target: dev
     depends_on:
       redis:
         condition: service_healthy
-    healthcheck: 
+    healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost"]
       interval: 15s
       timeout: 5s
@@ -18,8 +16,9 @@ services:
       start_period: 10s
     volumes:
      - ./vote:/usr/local/app
-    ports:
-      - "5000:80"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.vote.tls=true
     networks:
       - front-tier
       - back-tier
@@ -34,8 +33,10 @@ services:
     volumes:
       - ./result:/usr/local/app
     ports:
-      - "5001:80"
       - "127.0.0.1:9229:9229"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.result.tls=true
     networks:
       - front-tier
       - back-tier
@@ -88,8 +89,62 @@ services:
       - front-tier
     restart: "no"
 
+  traefik:
+    image: traefik:2.11
+    container_name: traefik
+    volumes:
+      - ./traefik/:/etc/traefik
+      # - ./traefik/tls/certs:/etc/certs
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - 80:80
+      - 443:443
+      - 8080:8080
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.traefik.tls=true
+      - traefik.http.services.traefik_service.loadbalancer.server.port=8080
+      - traefik.http.routers.traefik.middlewares=auth-middleware
+      - traefik.http.middlewares.auth-middleware.basicauth.usersfile=/etc/traefik/user_credential
+    networks:
+      - front-tier
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch-oss:7.0.1
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - http.port=9200
+      - http.cors.enabled=true
+      - http.cors.allow-origin=http://localhost:1358,http://127.0.0.1:1358
+      - http.cors.allow-headers=X-Requested-With,X-Auth-Token,Content-Type,Content-Length,Authorization
+      - http.cors.allow-credentials=true
+      - bootstrap.memory_lock=true
+      - 'ES_JAVA_OPTS=-Xms512m -Xmx512m'
+    ports:
+      - '9200:9200'
+      - '9300:9300'
+
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: grafana
+    # restart: unless-stopped
+    ports:
+      - '3000:3000'
+    volumes:
+      - grafana-data:/var/lib/grafana
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.grafana.tls=true
+      - traefik.http.services.grafana_service.loadbalancer.server.port=3000
+    networks:
+      - front-tier
+
+
+
 volumes:
   db-data:
+  grafana-data:
 
 networks:
   front-tier:

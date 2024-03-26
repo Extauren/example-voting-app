@@ -29,7 +29,7 @@ namespace Worker
                 while (true)
                 {
                     // Slow down to prevent CPU spike, only query each 100ms
-                    Thread.Sleep(100);
+                    Thread.Sleep(1);
 
                     // Reconnect redis if down
                     if (redisConn == null || !redisConn.IsConnected) {
